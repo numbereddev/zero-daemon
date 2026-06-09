@@ -1,0 +1,12 @@
+# Builds
+out/
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# OS
+.DS_Store
+Thumbs.db
