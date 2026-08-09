@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+
+while read -r oldrev newrev refname; do
+    # Block branch deletions
+    if [ "$newrev" = "0000000000000000000000000000000000000000" ]; then
+        echo "ERROR: Deleting branches is forbidden on this platform."
+        exit 1
+    fi
+
+    # Enforce main branch
+    if [ "$refname" != "ref/heads/main" ]; then
+        echo "ERROR: Rejected! This server only accepts the 'main' branch."
+        echo "Please use: git push deploy your_branch:main"
+        exit 1
+    fi
+
+    # Block git submoudles
+    # TODO: once we figure out how to handle them, we might bring them in to be allowed.
+    SUBMODULES_FOUND=$(git diff-tree -r --no-commit-id "$oldrev" "$newrev" 2>/dev/null | awk '{print $2}' | grep -E '^160000$')
+    GITMODULE_FILE=$(git diff-tree -r --no-commit-id --name-only "$oldrev" "$newrev" 2>/dev/null | grep -E '^\.gitmodules$')
+
+    if [ ! -z "$SUBMODULES_FOUND" ] || [ ! -z "$GITMODULE_FILE" ]; then
+        echo "ERROR: Git Submodules are forbidden and disabled on this server."
+        exit 1
+    fi
+done
+
+exit 0

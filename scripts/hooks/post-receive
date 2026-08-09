@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+if [ -z "$GIT_INTERNAL_TARGET_PATH" ] || [ -z "$GIT_INTERNAL_SERVER_ID" ]; then
+    echo "ERROR: Missing critical internal deployment environment variables."
+    exit 1
+fi
+
+mkdir -p "$GIT_INTERNAL_TARGET_PATH"
+git --work-tree="$GIT_INTERNAL_TARGET_PATH" checkout -f main >/dev/null 2>&1
+
+echo "DEPLOYMENT_TRIGGER:${GIT_INTERNAL_SERVER_ID}"
+
+exit 0

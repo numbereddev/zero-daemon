@@ -16,7 +16,9 @@ var gitSem = make(chan struct{}, 100)
 func (h *Handler) RegisterRoutes(router fiber.Router) {
 	gitURL := router.Group("/:repo")
 
-	// TODO: support for git submodules tho i may not need it. will need investigation.
+	// TODO: Support for git submodules (pulling from them + private repositories, will need handling).
+	// For now: disabling submodule support.
+
 	gitURL.Post("/git-upload-pack", h.UploadPack)
 	gitURL.Post("/git-receive-pack", h.ReceivePack)
 	gitURL.Get("/info/refs", h.InfoRefs)
