@@ -14,34 +14,31 @@ func NewHandler(s *Service) *Handler {
 var gitSem = make(chan struct{}, 100)
 
 func (h *Handler) RegisterRoutes(router fiber.Router) {
-	gitURL := router.Group("/:repo")
+	repoURL := router.Group("/:repo", func(c fiber.Ctx) error {
+		gitSem <- struct{}{}
+		defer func() { <-gitSem }()
+		return c.Next()
+	})
 
 	// TODO: Support for git submodules (pulling from them + private repositories, will need handling).
 	// For now: disabling submodule support.
 
-	gitURL.Post("/git-upload-pack", h.UploadPack)
-	gitURL.Post("/git-receive-pack", h.ReceivePack)
-	gitURL.Get("/info/refs", h.InfoRefs)
+	repoURL.Post("/git-upload-pack", h.UploadPack)
+	repoURL.Post("/git-receive-pack", h.ReceivePack)
+	repoURL.Get("/info/refs", h.InfoRefs)
 }
 
 func (h *Handler) UploadPack(c fiber.Ctx) error {
-	gitSem <- struct{}{}
-	defer func() { <-gitSem }()
-
+	h.service.GitUploadPack()
 	return c.SendStatus(fiber.StatusNotImplemented)
 }
 
 func (h *Handler) ReceivePack(c fiber.Ctx) error {
-	gitSem <- struct{}{}
-	defer func() { <-gitSem }()
-
+	h.service.GitReceivePack()
 	return c.SendStatus(fiber.StatusNotImplemented)
 }
 
 func (h *Handler) InfoRefs(c fiber.Ctx) error {
-	gitSem <- struct{}{}
-	defer func() { <-gitSem }()
-
 	// service may be one of the two
 	// - git-upload-pack ; client wants to fetch/clone
 	// - git-receive-pack ; client wants to push
@@ -55,6 +52,8 @@ func (h *Handler) InfoRefs(c fiber.Ctx) error {
 	}
 
 	_ = repoName
+
+	h.service.GitInfoRefs()
 
 	// Git smart HTTP
 	return c.SendStatus(fiber.StatusNotImplemented)
