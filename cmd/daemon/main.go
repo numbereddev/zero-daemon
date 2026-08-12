@@ -4,9 +4,9 @@ import (
 	"log"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/numbereddev/zero-daemon/internal/git"
 	apphttp "github.com/numbereddev/zero-daemon/internal/http"
-	"github.com/numbereddev/zero-daemon/internal/http/git"
-	"github.com/numbereddev/zero-daemon/internal/http/server"
+	"github.com/numbereddev/zero-daemon/internal/server"
 )
 
 func main() {
