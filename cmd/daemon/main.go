@@ -6,9 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/numbereddev/zero-daemon/internal/db"
-	"github.com/numbereddev/zero-daemon/internal/git"
-	apphttp "github.com/numbereddev/zero-daemon/internal/http"
-	"github.com/numbereddev/zero-daemon/internal/server"
+	"github.com/numbereddev/zero-daemon/internal/router"
 )
 
 func main() {
@@ -18,17 +16,6 @@ func main() {
 	}
 
 	app := fiber.New()
-
-	gitSvc := git.NewService()
-	serverSvc := server.NewService()
-
-	gitHdl := git.NewHandler(gitSvc)
-	serviceHdl := server.NewHandler(serverSvc)
-
-	apphttp.Register(app, apphttp.RouterDeps{
-		GitHandler:    gitHdl,
-		ServerHandler: serviceHdl,
-	})
-
+	router.Register(app)
 	log.Fatal(app.Listen(":3000"))
 }
