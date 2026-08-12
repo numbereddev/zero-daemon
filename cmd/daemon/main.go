@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	_ = db.Create()
+	_ = db.Init()
 	if err := db.Migrate(); err != nil {
 		panic(fmt.Errorf("could not migrate: %v", err))
 	}

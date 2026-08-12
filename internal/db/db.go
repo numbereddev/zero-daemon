@@ -19,7 +19,7 @@ var (
 	ErrClientNotCreated = errors.New("client not created")
 )
 
-func Create() error {
+func Init() error {
 	ran := false
 	_once.Do(func() {
 		ran = true
