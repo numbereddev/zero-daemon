@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"log"
 	"sync"
 
 	"github.com/numbereddev/zero-daemon/internal/models"
@@ -43,7 +44,8 @@ func Migrate() error {
 		return err
 	}
 
-	return db.AutoMigrate(&models.Server{})
+	log.Print("Migrating database...")
+	return db.AutoMigrate(&models.Service{})
 }
 
 func Client() (db *gorm.DB, err error) {

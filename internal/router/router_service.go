@@ -2,22 +2,22 @@ package router
 
 import "github.com/gofiber/fiber/v3"
 
-func getListServers(c fiber.Ctx) error {
+func getServicesList(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNotImplemented)
 }
 
-func postCreateServer(c fiber.Ctx) error {
+func postCreateService(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNotImplemented)
 }
 
-func getServer(c fiber.Ctx) error {
+func getService(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNotImplemented)
 }
 
-func postUpdateServer(c fiber.Ctx) error {
+func postUpdateService(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNotImplemented)
 }
 
-func deleteServer(c fiber.Ctx) error {
+func deleteService(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNotImplemented)
 }

@@ -8,12 +8,12 @@ func Register(app *fiber.App) {
 	{
 		servers := app.Group("/servers")
 
-		servers.Get("/", getListServers)
-		servers.Post("/", postCreateServer)
+		servers.Get("/", getServicesList)
+		servers.Post("/", postCreateService)
 
-		servers.Get("/:id", getServer)
-		servers.Post("/:id", postUpdateServer)
-		servers.Delete("/:id", deleteServer)
+		servers.Get("/:id", getService)
+		servers.Post("/:id", postUpdateService)
+		servers.Delete("/:id", deleteService)
 	}
 
 	{
