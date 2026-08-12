@@ -1,5 +1,6 @@
 # Builds
 out/
+*.db
 
 # Env
 .env
