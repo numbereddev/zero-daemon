@@ -20,9 +20,7 @@ type Runtime struct {
 	state   string
 	stateMx sync.Mutex
 
-	// TODO: do something with this
 	stream *client.HijackedResponse
-
 	events *events.Bus[[]byte]
 }
 
