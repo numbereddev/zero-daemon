@@ -9,14 +9,14 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/sse"
 	"github.com/moby/moby/client"
-	"github.com/numbereddev/zero-daemon/internal/container"
-	"github.com/numbereddev/zero-daemon/internal/db"
-	"github.com/numbereddev/zero-daemon/internal/router"
+	"github.com/numbereddev/zero-daemon/internal/database"
+	"github.com/numbereddev/zero-daemon/router"
+	"github.com/numbereddev/zero-daemon/runtime"
 )
 
 func main() {
-	_ = db.Init()
-	if err := db.Migrate(); err != nil {
+	_ = database.Init()
+	if err := database.Migrate(); err != nil {
 		panic(fmt.Errorf("could not migrate: %v", err))
 	}
 
@@ -32,44 +32,33 @@ func main() {
 	router.Register(app)
 
 	debug := app.Group("/debug")
-	debug.Post("/container/create", func(c fiber.Ctx) error {
-		// ctx := context.Background()
-
-		return nil
-	})
-
 	debug.Get("/container/test", sse.New(sse.Config{
 		Handler: func(c fiber.Ctx, stream *sse.Stream) error {
 			if err := stream.Comment("connected"); err != nil {
 				return err
 			}
 
-			container := container.New(apiClient, container.Config{})
-
-			emitter := container.Emitter()
-			logsChan := emitter.On()
-			defer emitter.Off(logsChan)
+			runtime := runtime.New(apiClient, "test")
+			events := runtime.Events()
+			logs := events.On()
+			defer events.Off(logs)
 
 			errCh := make(chan error)
-			defer close(errCh)
 			go func() {
+				defer close(errCh)
 				ctx := context.Background()
-				if err := container.DebugCreate(ctx); err != nil {
+
+				if err := runtime.Create(ctx); err != nil {
 					errCh <- fmt.Errorf("failed creating container: %w", err)
 					return
 				}
 
-				if err := container.Attach(ctx); err != nil {
-					errCh <- fmt.Errorf("failed attaching to container: %w", err)
-					return
-				}
-
-				if err := container.Start(ctx); err != nil {
+				if err := runtime.Start(ctx); err != nil {
 					errCh <- fmt.Errorf("failed starting container: %w", err)
 					return
 				}
 
-				if err := container.Remove(ctx); err != nil {
+				if err := runtime.Remove(ctx); err != nil {
 					errCh <- fmt.Errorf("failed removing bontainer: %w", err)
 					return
 				}
@@ -77,28 +66,30 @@ func main() {
 
 			for {
 				select {
-				case <-c.Context().Done():
-					return nil
-				case err := <-errCh:
-					fmt.Printf("error occurred: %v\n", err)
-					if err := stream.Event(sse.Event{
-						Name: "Error",
-						Data: err.Error(),
-					}); err != nil {
-						return err
-					}
-					return err
-				case msg, ok := <-logsChan:
+				// logs
+				case line, ok := <-logs:
 					if !ok {
 						return nil
 					}
 
 					if err := stream.Event(sse.Event{
 						Name: "Received",
-						Data: string(msg),
+						Data: string(line),
 					}); err != nil {
 						return err
 					}
+				// errors
+				case err, ok := <-errCh:
+					if ok {
+						fmt.Printf("error occurred: %v\n", err)
+						return stream.Event(sse.Event{
+							Name: "Error",
+							Data: err.Error(),
+						})
+					}
+				// done
+				case <-c.Context().Done():
+					return nil
 				}
 			}
 		},

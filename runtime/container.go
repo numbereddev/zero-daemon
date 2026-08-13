@@ -1,0 +1,101 @@
+package runtime
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"time"
+
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
+)
+
+func (r *Runtime) checkImage(image string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	// TODO: for now it just always pulls but we gotta make this smarter
+
+	reader, err := r.client.ImagePull(ctx, image, client.ImagePullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed image pull: %w", err)
+	}
+
+	defer func() { _ = reader.Close() }()
+	_, _ = io.Copy(r.events, reader)
+
+	return nil
+}
+
+func (r *Runtime) Start(ctx context.Context) error {
+	r.SetState("running")
+
+	if err := r.Attach(ctx); err != nil {
+		return fmt.Errorf("failed container attach: %w", err)
+	}
+
+	if _, err := r.client.ContainerStart(ctx, r.ID, client.ContainerStartOptions{}); err != nil {
+		return fmt.Errorf("failed container start: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Runtime) Create(ctx context.Context) error {
+	if err := r.checkImage("docker.io/library/alpine"); err != nil {
+		return fmt.Errorf("failed pulling image: %w", err)
+	}
+
+	_, err := r.client.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Name: r.ID,
+		Config: &container.Config{
+			Cmd: []string{"echo", "hello, world\n"},
+			Tty: false,
+		},
+		Image: "alpine",
+	})
+	if err != nil {
+		return fmt.Errorf("failed container create: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Runtime) Attach(ctx context.Context) error {
+	if r.IsAttached() {
+		return nil
+	}
+
+	if stream, err := r.client.ContainerAttach(ctx, r.ID, client.ContainerAttachOptions{
+		Stdin:  true,
+		Stdout: true,
+		Stderr: true,
+		Stream: true,
+	}); err != nil {
+		return fmt.Errorf("failed container attach: %w", err)
+	} else {
+		r.SetStream(&stream.HijackedResponse)
+	}
+
+	go func() {
+		defer r.stream.Close()
+		defer func() { r.SetStream(nil) }()
+
+		// TODO: do something else, event system shouldn't be used for this stuff.
+		_, _ = io.Copy(r.events, r.stream.Reader)
+	}()
+
+	return nil
+}
+
+// TODO: Add Remove options
+func (r *Runtime) Remove(ctx context.Context) error {
+	if _, err := r.client.ContainerRemove(ctx, r.ID, client.ContainerRemoveOptions{
+		RemoveVolumes: true,
+		Force:         true,
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}

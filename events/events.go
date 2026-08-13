@@ -11,13 +11,8 @@ const DefaultBufferSize = 10
 // make sure Bus implements io.Writer and ReaderBus
 var (
 	_ = io.Writer(&Bus[any]{})
-	_ = ReadBus[any](&Bus[any]{})
+	_ = Reader[any](&Bus[any]{})
 )
-
-type ReadBus[T any] interface {
-	On(c ...SubOptions) chan T
-	Off(channel chan T)
-}
 
 type Bus[T any] struct {
 	blocking      bool
@@ -43,41 +38,6 @@ func NewBus[T any](cfg ...BusConfig) *Bus[T] {
 		blocking:    cfg[0].Blocking,
 		subscribers: make(map[chan T]bool),
 	}
-}
-
-type SubOptions struct {
-	// TODO: topics
-	Buffer *int
-}
-
-func (b *Bus[T]) On(opts ...SubOptions) chan T {
-	b.subscribersMx.Lock()
-	defer b.subscribersMx.Unlock()
-
-	// Ensure the array is never empty
-	if len(opts) == 0 {
-		opts = []SubOptions{{}}
-	}
-
-	// Initialize defaults
-
-	BufferSize := opts[0].Buffer
-	if BufferSize == nil {
-		BufferSize = new(DefaultBufferSize)
-	}
-
-	// Create channel and provide it
-	channel := make(chan T, *BufferSize)
-	b.subscribers[channel] = true
-	return channel
-}
-
-func (b *Bus[T]) Off(channel chan T) {
-	b.subscribersMx.Lock()
-	defer b.subscribersMx.Unlock()
-
-	delete(b.subscribers, channel)
-	close(channel)
 }
 
 func (b *Bus[T]) Publish(p T) (sent int, total int) {
