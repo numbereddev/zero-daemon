@@ -40,37 +40,27 @@ func main() {
 
 	debug.Get("/container/test", sse.New(sse.Config{
 		Handler: func(c fiber.Ctx, stream *sse.Stream) error {
-			container := container.Container{Client: apiClient}
+			container := container.New(apiClient, container.Config{})
 
-			logsChan := container.Subscribe()
-			defer container.Unsubscribe(logsChan)
+			emitter := container.Emitter()
+			logsChan := emitter.On()
+			defer emitter.Off(logsChan)
 
 			errCh := make(chan error)
 			defer close(errCh)
 			go func() {
 				ctx := context.Background()
-
-				if err := container.DebugPull(ctx); err != nil {
-					errCh <- fmt.Errorf("failed pullng image: %w", err)
-					return
-				}
-
-				if err := container.DebugCreate(ctx); err != nil {
+				if err := container.DebugStart(ctx); err != nil {
 					errCh <- fmt.Errorf("failed creating container: %w", err)
 					return
 				}
 
-				if err := container.DebugAttach(ctx); err != nil {
+				if err := container.Attach(ctx); err != nil {
 					errCh <- fmt.Errorf("failed attaching to container: %w", err)
 					return
 				}
 
-				if err := container.DebugStart(ctx); err != nil {
-					errCh <- fmt.Errorf("failed starting container: %w", err)
-					return
-				}
-
-				if err := container.DebugRemove(ctx); err != nil {
+				if err := container.Stop(ctx); err != nil {
 					errCh <- fmt.Errorf("failed removing bontainer: %w", err)
 					return
 				}
