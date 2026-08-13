@@ -50,7 +50,7 @@ func main() {
 			defer close(errCh)
 			go func() {
 				ctx := context.Background()
-				if err := container.DebugStart(ctx); err != nil {
+				if err := container.DebugCreate(ctx); err != nil {
 					errCh <- fmt.Errorf("failed creating container: %w", err)
 					return
 				}
@@ -60,7 +60,12 @@ func main() {
 					return
 				}
 
-				if err := container.Stop(ctx); err != nil {
+				if err := container.Start(ctx); err != nil {
+					errCh <- fmt.Errorf("failed starting container: %w", err)
+					return
+				}
+
+				if err := container.Remove(ctx); err != nil {
 					errCh <- fmt.Errorf("failed removing bontainer: %w", err)
 					return
 				}

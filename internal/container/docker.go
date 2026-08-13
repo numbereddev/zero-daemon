@@ -23,7 +23,20 @@ func (c *Container) ensureDockerImage(ctx context.Context, image string) error {
 	return nil
 }
 
-func (c *Container) DebugStart(ctx context.Context) error {
+func (c *Container) Start(ctx context.Context) error {
+	if !c.Exists() {
+		return errors.New("container no no exist")
+	}
+
+	c.SetState("running")
+	if _, err := c.client.ContainerStart(ctx, c.ID(), client.ContainerStartOptions{}); err != nil {
+		return fmt.Errorf("failed container start: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Container) DebugCreate(ctx context.Context) error {
 	if c.Exists() {
 		return errors.New("container alr exist")
 	}
@@ -44,14 +57,10 @@ func (c *Container) DebugStart(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed container create: %w", err)
 	}
+
 	c.SetState("created")
 	c.SetID(resp.ID)
 	c.SetExists(true)
-
-	if _, err := c.client.ContainerStart(ctx, c.id, client.ContainerStartOptions{}); err != nil {
-		return fmt.Errorf("failed container start: %w", err)
-	}
-	c.SetState("running")
 
 	return nil
 }
@@ -61,7 +70,7 @@ func (c *Container) Attach(ctx context.Context) error {
 		return errors.New("container no no exist")
 	}
 
-	out, err := c.client.ContainerAttach(ctx, c.id, client.ContainerAttachOptions{
+	out, err := c.client.ContainerAttach(ctx, c.ID(), client.ContainerAttachOptions{
 		Stdin:  true,
 		Stdout: true,
 		Stderr: true,
@@ -79,13 +88,13 @@ func (c *Container) Attach(ctx context.Context) error {
 	return nil
 }
 
-// TODO: Stop options
-func (c *Container) Stop(ctx context.Context) error {
+// TODO: Add Remove options
+func (c *Container) Remove(ctx context.Context) error {
 	if !c.Exists() {
 		return errors.New("container no no exist")
 	}
 
-	if _, err := c.client.ContainerRemove(ctx, c.id, client.ContainerRemoveOptions{}); err != nil {
+	if _, err := c.client.ContainerRemove(ctx, c.ID(), client.ContainerRemoveOptions{}); err != nil {
 		return err
 	}
 
