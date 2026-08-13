@@ -46,6 +46,7 @@ func (c *Container) DebugStart(ctx context.Context) error {
 	}
 	c.SetState("created")
 	c.SetID(resp.ID)
+	c.SetExists(true)
 
 	if _, err := c.client.ContainerStart(ctx, c.id, client.ContainerStartOptions{}); err != nil {
 		return fmt.Errorf("failed container start: %w", err)
@@ -88,9 +89,7 @@ func (c *Container) Stop(ctx context.Context) error {
 		return err
 	}
 
-	c.Lock()
-	c.exists = false
-	c.Unlock()
+	c.SetExists(false)
 
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 type Container struct {
 	sync.RWMutex
 	client *client.Client
+	// TODO: there gotta be a better way
 	exists bool
 
 	id string
@@ -31,4 +32,30 @@ func New(cli *client.Client, cfg Config) *Container {
 		client:   cli,
 		eventBus: events.NewBus[[]byte](),
 	}
+}
+
+func (c *Container) SetID(id string) {
+	c.Lock()
+	c.id = id
+	c.Unlock()
+}
+
+func (c *Container) ID() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.id
+}
+
+// TODO: there gotta be a better way
+func (c *Container) Exists() bool {
+	c.RLock()
+	defer c.RUnlock()
+	return c.exists
+}
+
+// TODO: there gotta be a better way
+func (c *Container) SetExists(exists bool) {
+	c.Lock()
+	c.exists = exists
+	c.Unlock()
 }
