@@ -22,6 +22,7 @@ func (r *Runtime) checkImage(image string) error {
 	}
 
 	defer func() { _ = reader.Close() }()
+	// TODO: make it actually parse the lines and send it properly in
 	_, _ = io.Copy(r.eventBus, reader)
 
 	return nil
@@ -42,7 +43,8 @@ func (r *Runtime) Start(ctx context.Context) error {
 }
 
 func (r *Runtime) Create(ctx context.Context) error {
-	if err := r.checkImage("docker.io/library/alpine"); err != nil {
+	image := "docker.io/library/alpine"
+	if err := r.checkImage(image); err != nil {
 		return fmt.Errorf("failed pulling image: %w", err)
 	}
 
@@ -54,7 +56,7 @@ func (r *Runtime) Create(ctx context.Context) error {
 			Cmd: []string{"echo", "hello, world\n"},
 			Tty: false,
 		},
-		Image: "alpine",
+		Image: image,
 	})
 	if err != nil {
 		return fmt.Errorf("failed container create: %w", err)
