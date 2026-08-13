@@ -40,6 +40,10 @@ func main() {
 
 	debug.Get("/container/test", sse.New(sse.Config{
 		Handler: func(c fiber.Ctx, stream *sse.Stream) error {
+			if err := stream.Comment("connected"); err != nil {
+				return err
+			}
+
 			container := container.New(apiClient, container.Config{})
 
 			emitter := container.Emitter()
