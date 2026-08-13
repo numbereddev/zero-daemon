@@ -14,27 +14,33 @@ type Runtime struct {
 	mu     sync.RWMutex
 	client *client.Client
 
-	ID string
+	id string
 
 	// TODO: needs to be reworked, just temp
 	state   string
 	stateMx sync.Mutex
 
-	stream *client.HijackedResponse
-	events *events.Bus[[]byte]
+	stream   *client.HijackedResponse
+	eventBus *events.Bus[[]byte]
 }
 
 // TODO: Configuration
 func New(cli *client.Client, id string) *Runtime {
 	return &Runtime{
-		ID:     id,
-		client: cli,
-		events: events.NewBus[[]byte](),
+		id:       id,
+		client:   cli,
+		eventBus: events.NewBus[[]byte](),
 	}
 }
 
+func (r *Runtime) ID() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.id
+}
+
 func (r *Runtime) Events() events.Reader[[]byte] {
-	return r.events
+	return r.eventBus
 }
 
 func (r *Runtime) IsAttached() bool {
@@ -43,7 +49,7 @@ func (r *Runtime) IsAttached() bool {
 	return r.stream != nil
 }
 
-func (r *Runtime) SetStream(stream *client.HijackedResponse) {
+func (r *Runtime) setStream(stream *client.HijackedResponse) {
 	r.mu.Lock()
 	r.stream = stream
 	r.mu.Unlock()
@@ -65,7 +71,7 @@ func (r *Runtime) Exists() (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if _, err := r.client.ContainerInspect(ctx, r.ID, client.ContainerInspectOptions{}); err != nil {
+	if _, err := r.client.ContainerInspect(ctx, r.ID(), client.ContainerInspectOptions{}); err != nil {
 		if errdefs.IsNotFound(err) {
 			return false, nil
 		}
