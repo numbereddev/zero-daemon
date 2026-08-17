@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/containerd/errdefs"
@@ -18,12 +17,14 @@ func (r *Runtime) Start(ctx context.Context) error {
 	if err := r.remove(ctx); err != nil {
 		if !errdefs.IsNotFound(err) {
 			r.SetState("offline")
+			_ = r.bus.Publish(EventStateError, err.Error())
 			return fmt.Errorf("failed container cleanup: %w", err)
 		}
 	}
 
 	if err := r.create(ctx); err != nil {
 		r.SetState("offline")
+		_ = r.bus.Publish(EventStateError, err.Error())
 		return fmt.Errorf("failed container creation: %w", err)
 	}
 
@@ -32,11 +33,13 @@ func (r *Runtime) Start(ctx context.Context) error {
 
 	if err := r.Attach(tCtx); err != nil {
 		r.SetState("offline")
+		_ = r.bus.Publish(EventStateError, err.Error())
 		return fmt.Errorf("failed container attach: %w", err)
 	}
 
 	if _, err := r.cli.ContainerStart(tCtx, r.id, client.ContainerStartOptions{}); err != nil {
 		r.SetState("offline")
+		_ = r.bus.Publish(EventStateError, err.Error())
 		return fmt.Errorf("failed container start: %w", err)
 	}
 
@@ -65,7 +68,19 @@ func (r *Runtime) Attach(ctx context.Context) error {
 		defer r.stream.Close()
 		defer func() { r.setStream(nil) }()
 
-		_, _ = io.Copy(r.bus.Writer(EventConsoleOut), r.stream.Reader)
+		writer := r.bus.Writer(EventConsoleOut)
+		buf := make([]byte, 32*1024)
+
+		for {
+			n, err := r.stream.Reader.Read(buf)
+			if n > 0 {
+				_, _ = writer.Write(buf[:n])
+			}
+
+			if err != nil {
+				return
+			}
+		}
 	}()
 
 	return nil

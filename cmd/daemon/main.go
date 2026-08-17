@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
@@ -75,27 +77,48 @@ func main() {
 			}()
 
 			// Container stdout -> Websocket
+			// TODO: extract/abstract the batcher
 			go func() {
+				ticker := time.NewTicker(30 * time.Millisecond)
+				defer ticker.Stop()
+				var batchBuffer bytes.Buffer
+
 				for {
 					select {
 					case <-disconnect:
 						return
+
 					case event, ok := <-eventsCh:
 						if !ok {
 							return
 						}
 
-						// TODO: better code structure, currently this is passing through the low-level stuff
-						payload, err := json.Marshal(WSMessage{
-							Event: event.Topic,
-							Args:  []json.RawMessage{mustJSONString(event.Data)},
-						})
-						if err != nil {
-							continue
+						if event.Topic == runtime.EventConsoleOut {
+							batchBuffer.WriteString(event.Data)
+						} else {
+							payload, err := json.Marshal(WSMessage{
+								Event: event.Topic,
+								Args:  []json.RawMessage{mustJSONString(event.Data)},
+							})
+							if err == nil {
+								_ = c.WriteMessage(websocket.TextMessage, payload)
+							}
 						}
 
-						if err := c.WriteMessage(websocket.TextMessage, payload); err != nil {
-							return // Connection closed by client
+					case <-ticker.C:
+						if batchBuffer.Len() > 0 {
+							payload, err := json.Marshal(WSMessage{
+								Event: runtime.EventConsoleOut,
+								Args:  []json.RawMessage{mustJSONString(batchBuffer.String())},
+							})
+
+							if err == nil {
+								if err := c.WriteMessage(websocket.TextMessage, payload); err != nil {
+									return // Client disconnected
+								}
+							}
+
+							batchBuffer.Reset() // empty buffer for next 30ms
 						}
 					}
 				}

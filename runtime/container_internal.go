@@ -13,17 +13,31 @@ import (
 // create creates the underlying Docker container and shouldn't be called manually
 func (r *Runtime) create(ctx context.Context) error {
 	// TODO: proper service configuration stuff
-	image := "docker.io/library/ubuntu"
+	image := "docker.io/library/ubuntudksfjaskf"
 	if err := r.checkImage(image); err != nil {
 		return fmt.Errorf("failed pulling image: %w", err)
 	}
+
+	const defaultPeriod int64 = 100_000
+	const cpuPercentage int64 = 50
+	cpuQuota := (cpuPercentage * defaultPeriod) / 100
 
 	_, err := r.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		// This is okay, because Docker lets us do everything on containers with both the Docker ID
 		// or the container name interchangeably.
 		Name: r.ID(),
+		HostConfig: &container.HostConfig{
+			Resources: container.Resources{
+				CPUPeriod:  defaultPeriod,
+				CPUQuota:   cpuQuota,
+				Memory:     1024 * 1024 * 1024,
+				MemorySwap: 1024 * 1024 * 1024,
+				// BlkioWeight: 512,
+			},
+		},
 		Config: &container.Config{
-			Cmd: []string{"sh", "-c", "cat /dev/urandom | tr -dc '0-9A-F ' | fold -w 80"},
+			Cmd: []string{"sh", "-c", `apt update -y && apt upgrade -y && apt install htop -y && htop`},
+
 			Tty: true,
 		},
 		Image: image,

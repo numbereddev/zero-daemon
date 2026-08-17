@@ -10,10 +10,10 @@ import (
 
 const (
 	EventImagePullProgress = "image.pull.progress"
-	EventImagePullError    = "image.pull.error"
 	EventImagePullBegin    = "image.pull.begin"
 	EventImagePullDone     = "image.pull.done"
 	EventStateChange       = "state.change"
+	EventStateError        = "state.error"
 	EventConsoleOut        = "console.output"
 )
 
