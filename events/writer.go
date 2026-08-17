@@ -23,8 +23,6 @@ func (w *topicWriter[T]) Write(p []byte) (n int, err error) {
 	buf := make([]byte, len(p))
 	copy(buf, p)
 
-	fmt.Printf("TEST: `%q`\n", buf)
-
 	var typedBuf T
 	switch any(typedBuf).(type) {
 	case []byte:

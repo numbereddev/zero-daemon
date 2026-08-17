@@ -16,8 +16,10 @@ func (r *Runtime) Start(ctx context.Context) error {
 	r.SetState("starting")
 
 	if err := r.remove(ctx); err != nil {
-		r.SetState("offline")
-		return fmt.Errorf("failed container cleanup: %w", err)
+		if !errdefs.IsNotFound(err) {
+			r.SetState("offline")
+			return fmt.Errorf("failed container cleanup: %w", err)
+		}
 	}
 
 	if err := r.create(ctx); err != nil {

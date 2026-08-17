@@ -63,6 +63,8 @@ func main() {
 		})
 
 		app.Get("/ws/testing/console", websocket.New(func(c *websocket.Conn) {
+			_ = testRun.Attach(context.Background())
+
 			eventsCh := testRun.Events().On([]string{events.TopicAll}, 250)
 			defer testRun.Events().Off(eventsCh)
 

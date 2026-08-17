@@ -23,7 +23,7 @@ func (r *Runtime) create(ctx context.Context) error {
 		// or the container name interchangeably.
 		Name: r.ID(),
 		Config: &container.Config{
-			Cmd: []string{"echo", "hello, world\n"},
+			Cmd: []string{"sh", "-c", "cat /dev/urandom | tr -dc '0-9A-F ' | fold -w 80"},
 			Tty: true,
 		},
 		Image: image,
