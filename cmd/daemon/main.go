@@ -11,7 +11,7 @@ import (
 	"github.com/moby/moby/client"
 	"github.com/numbereddev/zero-daemon/internal/database"
 	"github.com/numbereddev/zero-daemon/router"
-	"github.com/numbereddev/zero-daemon/runtime"
+	"github.com/numbereddev/zero-daemon/service"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 				return err
 			}
 
-			runtime := runtime.New(apiClient, "test")
+			runtime := service.New(apiClient, "test")
 			events := runtime.Events()
 			logs := events.On()
 			defer events.Off(logs)
