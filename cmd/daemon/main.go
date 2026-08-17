@@ -2,17 +2,24 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 
+	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/logger"
-	"github.com/gofiber/fiber/v3/middleware/sse"
 	"github.com/moby/moby/client"
+	"github.com/numbereddev/zero-daemon/events"
 	"github.com/numbereddev/zero-daemon/internal/database"
 	"github.com/numbereddev/zero-daemon/router"
-	"github.com/numbereddev/zero-daemon/service"
+	"github.com/numbereddev/zero-daemon/runtime"
 )
+
+type WSMessage struct {
+	Event string            `json:"event"`
+	Args  []json.RawMessage `json:"args"`
+}
 
 func main() {
 	_ = database.Init()
@@ -29,71 +36,99 @@ func main() {
 
 	app := fiber.New()
 	app.Use(logger.New())
+	app.Use("/ws", func(c fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
 	router.Register(app)
 
-	debug := app.Group("/debug")
-	debug.Get("/container/test", sse.New(sse.Config{
-		Handler: func(c fiber.Ctx, stream *sse.Stream) error {
-			if err := stream.Comment("connected"); err != nil {
-				return err
+	{
+		// WARNING: TESTING STUFF
+
+		testRun := runtime.New(apiClient, "test")
+
+		app.Get("/testing", func(c fiber.Ctx) error {
+			ctx := context.Background()
+
+			if err := testRun.Start(ctx); err != nil {
+				return c.
+					Status(fiber.StatusInternalServerError).
+					SendString(fmt.Sprintf("failed starting container: %v", err))
 			}
 
-			runtime := service.New(apiClient, "test")
-			events := runtime.Events()
-			logs := events.On()
-			defer events.Off(logs)
+			return nil
+		})
 
-			errCh := make(chan error)
+		app.Get("/ws/testing/console", websocket.New(func(c *websocket.Conn) {
+			eventsCh := testRun.Events().On([]string{events.TopicAll}, 250)
+			defer testRun.Events().Off(eventsCh)
+
+			disconnect := make(chan struct{})
+			defer func() {
+				close(disconnect)
+				_ = c.Close()
+			}()
+
+			// Container stdout -> Websocket
 			go func() {
-				defer close(errCh)
-				ctx := context.Background()
+				for {
+					select {
+					case <-disconnect:
+						return
+					case event, ok := <-eventsCh:
+						if !ok {
+							return
+						}
 
-				if err := runtime.Create(ctx); err != nil {
-					errCh <- fmt.Errorf("failed creating container: %w", err)
-					return
-				}
+						// TODO: better code structure, currently this is passing through the low-level stuff
+						payload, err := json.Marshal(WSMessage{
+							Event: event.Topic,
+							Args:  []json.RawMessage{mustJSONString(event.Data)},
+						})
+						if err != nil {
+							continue
+						}
 
-				if err := runtime.Start(ctx); err != nil {
-					errCh <- fmt.Errorf("failed starting container: %w", err)
-					return
-				}
-
-				if err := runtime.Remove(ctx); err != nil {
-					errCh <- fmt.Errorf("failed removing bontainer: %w", err)
-					return
+						if err := c.WriteMessage(websocket.TextMessage, payload); err != nil {
+							return // Connection closed by client
+						}
+					}
 				}
 			}()
 
+			// Websocket -> Container stdin (xTerm)
 			for {
-				select {
-				// logs
-				case line, ok := <-logs:
-					if !ok {
-						return nil
-					}
-
-					if err := stream.Event(sse.Event{
-						Name: "Received",
-						Data: string(line),
-					}); err != nil {
-						return err
-					}
-				// errors
-				case err, ok := <-errCh:
-					if ok {
-						fmt.Printf("error occurred: %v\n", err)
-						return stream.Event(sse.Event{
-							Name: "Error",
-							Data: err.Error(),
-						})
-					}
-				// done
-				case <-c.Context().Done():
-					return nil
+				_, rawMsg, err := c.ReadMessage()
+				if err != nil {
+					// Client disconnected
+					break
 				}
+
+				var msg WSMessage
+				if err := json.Unmarshal(rawMsg, &msg); err != nil {
+					continue
+				}
+
+				fmt.Printf("Message: %+v\n", msg)
+
+				// TODO: send sdtin
+				// if msg.Event == "send command" && len(msg.Args) > 0 {
+				// 	var cmd string
+				// 	if err := json.Unmarshal(msg.Args[0], &cmd); err == nil {
+				// 		svc.SendStdin([]byte(cmd))
+				// 	}
+				// }
 			}
-		},
-	}))
+		}))
+	}
 
 	log.Fatal(app.Listen(":3000"))
+}
+
+func mustJSONString(s string) []byte {
+	b, _ := json.Marshal(s)
+	return b
 }

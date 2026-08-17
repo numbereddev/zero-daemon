@@ -1,24 +1,24 @@
 package events
 
 import (
-	"fmt"
+	"errors"
 	"io"
 	"sync"
 )
 
-const DefaultBufferSize = 10
+var _ = Reader[any](&Bus[any]{})
 
-// make sure Bus implements io.Writer and ReaderBus
-var (
-	_ = io.Writer(&Bus[any]{})
-	_ = Reader[any](&Bus[any]{})
-)
+var TopicAll string = "*"
+
+type Event[T any] struct {
+	Topic string
+	Data  T
+}
 
 type Bus[T any] struct {
 	blocking      bool
-	subscribersMx sync.RWMutex
-	// TODO: topics
-	subscribers map[chan T]bool
+	subscribersMu sync.RWMutex
+	subscribers   map[string]map[chan Event[T]]struct{}
 }
 
 type BusConfig struct {
@@ -36,46 +36,50 @@ func NewBus[T any](cfg ...BusConfig) *Bus[T] {
 
 	return &Bus[T]{
 		blocking:    cfg[0].Blocking,
-		subscribers: make(map[chan T]bool),
+		subscribers: make(map[string]map[chan Event[T]]struct{}),
 	}
 }
 
-func (b *Bus[T]) Publish(p T) (sent int, total int) {
-	b.subscribersMx.RLock()
-	defer b.subscribersMx.RUnlock()
+func (b *Bus[T]) Publish(topic string, p T) (err error) {
+	if topic == "*" || len(topic) == 0 {
+		return errors.New("topic must be of higher specificity")
+	}
 
-	total = len(b.subscribers)
-	sent = total
+	b.subscribersMu.RLock()
+	defer b.subscribersMu.RUnlock()
 
-	for sub := range b.subscribers {
+	targets := make(map[chan Event[T]]struct{})
+	for ch := range b.subscribers[topic] {
+		targets[ch] = struct{}{}
+	}
+	for ch := range b.subscribers["*"] {
+		targets[ch] = struct{}{}
+	}
+
+	event := Event[T]{
+		Topic: topic,
+		Data:  p,
+	}
+
+	for target := range targets {
 		if b.blocking {
-			sub <- p
+			target <- event
 			continue
 		}
 
 		// Non-blocking publush, if a client is taking too long we dismiss it
 		select {
-		case sub <- p:
+		case target <- event:
 		default:
-			sent--
 		}
 	}
 
-	return
+	return nil
 }
 
-// Write implements [io.Writer].
-func (b *Bus[T]) Write(p []byte) (n int, err error) {
-	var zero T
-
-	switch any(zero).(type) {
-	case []byte:
-		b.Publish(any(p).(T))
-	case string:
-		b.Publish(any(string(p)).(T))
-	default:
-		return 0, fmt.Errorf("Bus.Write only supports []byte or string, got %T", zero)
+func (b *Bus[T]) Writer(topic string) io.Writer {
+	return &topicWriter[T]{
+		bus:   b,
+		topic: topic,
 	}
-
-	return len(p), nil
 }
