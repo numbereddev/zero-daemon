@@ -15,7 +15,7 @@ import (
 	"github.com/numbereddev/zero-daemon/events"
 	"github.com/numbereddev/zero-daemon/internal/database"
 	"github.com/numbereddev/zero-daemon/router"
-	"github.com/numbereddev/zero-daemon/runtime"
+	"github.com/numbereddev/zero-daemon/server"
 )
 
 type WSMessage struct {
@@ -34,7 +34,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed moby client: %v\n", err)
 	}
-	defer func() { _ = apiClient.Close() }()
+	defer apiClient.Close()
 
 	app := fiber.New()
 	app.Use(logger.New())
@@ -50,12 +50,12 @@ func main() {
 	{
 		// WARNING: TESTING STUFF
 
-		testRun := runtime.New(apiClient, "test")
+		testServer := server.New(apiClient, "test")
 
 		app.Get("/testing", func(c fiber.Ctx) error {
 			ctx := context.Background()
 
-			if err := testRun.Start(ctx); err != nil {
+			if err := testServer.Start(ctx); err != nil {
 				return c.
 					Status(fiber.StatusInternalServerError).
 					SendString(fmt.Sprintf("failed starting container: %v", err))
@@ -65,60 +65,54 @@ func main() {
 		})
 
 		app.Get("/ws/testing/console", websocket.New(func(c *websocket.Conn) {
-			_ = testRun.Attach(context.Background())
-
-			eventsCh := testRun.Events().On([]string{events.TopicAll}, 250)
-			defer testRun.Events().Off(eventsCh)
+			_ = testServer.Attach(context.Background())
 
 			disconnect := make(chan struct{})
 			defer func() {
 				close(disconnect)
-				_ = c.Close()
+				c.Close()
 			}()
 
+			eventsCh := testServer.Events().On([]string{events.TopicAll}, 250)
+			defer testServer.Events().Off(eventsCh)
+
 			// Container stdout -> Websocket
-			// TODO: extract/abstract the batcher
 			go func() {
-				ticker := time.NewTicker(30 * time.Millisecond)
-				defer ticker.Stop()
-				var batchBuffer bytes.Buffer
+				// Batched console buffer
+				var consoleBuf bytes.Buffer
+				consoleBufT := time.NewTicker(35 * time.Millisecond)
+				defer consoleBufT.Stop()
 
 				for {
 					select {
 					case <-disconnect:
 						return
-
 					case event, ok := <-eventsCh:
 						if !ok {
 							return
 						}
 
-						if event.Topic == runtime.EventConsoleOut {
-							batchBuffer.WriteString(event.Data)
+						if event.Topic == server.EventConsoleOut {
+							consoleBuf.WriteString(event.Data)
 						} else {
-							payload, err := json.Marshal(WSMessage{
+							if payload, err := json.Marshal(WSMessage{
 								Event: event.Topic,
 								Args:  []json.RawMessage{mustJSONString(event.Data)},
-							})
-							if err == nil {
-								_ = c.WriteMessage(websocket.TextMessage, payload)
+							}); err == nil {
+								c.WriteMessage(websocket.TextMessage, payload)
 							}
 						}
+					case <-consoleBufT.C:
+						if consoleBuf.Len() == 0 {
+							continue
+						}
 
-					case <-ticker.C:
-						if batchBuffer.Len() > 0 {
-							payload, err := json.Marshal(WSMessage{
-								Event: runtime.EventConsoleOut,
-								Args:  []json.RawMessage{mustJSONString(batchBuffer.String())},
-							})
-
-							if err == nil {
-								if err := c.WriteMessage(websocket.TextMessage, payload); err != nil {
-									return // Client disconnected
-								}
-							}
-
-							batchBuffer.Reset() // empty buffer for next 30ms
+						if payload, err := json.Marshal(WSMessage{
+							Event: server.EventConsoleOut,
+							Args:  []json.RawMessage{mustJSONString(consoleBuf.String())},
+						}); err == nil {
+							c.WriteMessage(websocket.TextMessage, payload)
+							consoleBuf.Reset()
 						}
 					}
 				}
@@ -129,7 +123,7 @@ func main() {
 				_, rawMsg, err := c.ReadMessage()
 				if err != nil {
 					// Client disconnected
-					break
+					return
 				}
 
 				var msg WSMessage

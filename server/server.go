@@ -1,4 +1,4 @@
-package runtime
+package server
 
 import (
 	"sync"
@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	EventImagePullProgress = "image.pull.progress"
+	EventImagePullProgress = "image.pull.progress" // Data is of type ImagePullProgress
 	EventImagePullBegin    = "image.pull.begin"
 	EventImagePullDone     = "image.pull.done"
 	EventStateChange       = "state.change"
@@ -21,20 +21,20 @@ const (
 // TODO: start/running detector
 // TODO: historical logs getting
 
-type Runtime struct {
+type Server struct {
 	mu  sync.RWMutex
 	cli *client.Client
 
-	id     string
-	state  system.AtomicString
-	stream *client.HijackedResponse
+	id    string
+	state system.AtomicString
 
-	bus *events.Bus[string]
+	stream *client.HijackedResponse
+	bus    *events.Bus[string]
 }
 
-// TODO: Configuration
-func New(cli *client.Client, id string) *Runtime {
-	return &Runtime{
+func New(cli *client.Client, id string) *Server {
+	// TODO: Configuration
+	return &Server{
 		id:    id,
 		cli:   cli,
 		state: *system.NewAtomicString("offline"),
@@ -42,30 +42,30 @@ func New(cli *client.Client, id string) *Runtime {
 	}
 }
 
-func (r *Runtime) ID() string {
+func (r *Server) ID() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.id
 }
 
-func (r *Runtime) Events() events.Reader[string] {
+func (r *Server) Events() events.Reader[string] {
 	return r.bus
 }
 
-func (r *Runtime) State() string {
+func (r *Server) State() string {
 	return r.state.Load()
 }
 
-func (r *Runtime) SetState(state string) {
+func (r *Server) SetState(state string) {
 	if r.State() == state {
 		return
 	}
 
 	r.state.Store(state)
-	_ = r.bus.Publish(EventStateChange, state)
+	r.bus.Publish(EventStateChange, state)
 }
 
-func (r *Runtime) IsAttached() bool {
+func (r *Server) IsAttached() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.stream != nil

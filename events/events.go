@@ -1,7 +1,6 @@
 package events
 
 import (
-	"errors"
 	"io"
 	"sync"
 )
@@ -40,9 +39,9 @@ func NewBus[T any](cfg ...BusConfig) *Bus[T] {
 	}
 }
 
-func (b *Bus[T]) Publish(topic string, p T) (err error) {
+func (b *Bus[T]) Publish(topic string, p T) {
 	if topic == "*" || len(topic) == 0 {
-		return errors.New("topic must be of higher specificity")
+		panic("topic must be of higher specificity")
 	}
 
 	b.subscribersMu.RLock()
@@ -73,8 +72,6 @@ func (b *Bus[T]) Publish(topic string, p T) (err error) {
 		default:
 		}
 	}
-
-	return nil
 }
 
 func (b *Bus[T]) Writer(topic string) io.Writer {

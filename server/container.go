@@ -1,4 +1,4 @@
-package runtime
+package server
 
 import (
 	"context"
@@ -9,37 +9,36 @@ import (
 	"github.com/moby/moby/client"
 )
 
-func (r *Runtime) Start(ctx context.Context) error {
+func (r *Server) Start(ctx context.Context) error {
 	// TODO: first check here if already exists and running, if not then recreate, if yes resync state
-
 	r.SetState("starting")
 
 	if err := r.remove(ctx); err != nil {
 		if !errdefs.IsNotFound(err) {
 			r.SetState("offline")
-			_ = r.bus.Publish(EventStateError, err.Error())
+			r.bus.Publish(EventStateError, err.Error())
 			return fmt.Errorf("failed container cleanup: %w", err)
 		}
 	}
 
 	if err := r.create(ctx); err != nil {
 		r.SetState("offline")
-		_ = r.bus.Publish(EventStateError, err.Error())
+		r.bus.Publish(EventStateError, err.Error())
 		return fmt.Errorf("failed container creation: %w", err)
 	}
 
-	tCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	if err := r.Attach(tCtx); err != nil {
+	if err := r.Attach(sctx); err != nil {
 		r.SetState("offline")
-		_ = r.bus.Publish(EventStateError, err.Error())
+		r.bus.Publish(EventStateError, err.Error())
 		return fmt.Errorf("failed container attach: %w", err)
 	}
 
-	if _, err := r.cli.ContainerStart(tCtx, r.id, client.ContainerStartOptions{}); err != nil {
+	if _, err := r.cli.ContainerStart(sctx, r.id, client.ContainerStartOptions{}); err != nil {
 		r.SetState("offline")
-		_ = r.bus.Publish(EventStateError, err.Error())
+		r.bus.Publish(EventStateError, err.Error())
 		return fmt.Errorf("failed container start: %w", err)
 	}
 
@@ -48,7 +47,7 @@ func (r *Runtime) Start(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runtime) Attach(ctx context.Context) error {
+func (r *Server) Attach(ctx context.Context) error {
 	if r.IsAttached() {
 		return nil
 	}
@@ -66,7 +65,7 @@ func (r *Runtime) Attach(ctx context.Context) error {
 
 	go func() {
 		defer r.stream.Close()
-		defer func() { r.setStream(nil) }()
+		defer r.setStream(nil)
 
 		writer := r.bus.Writer(EventConsoleOut)
 		buf := make([]byte, 32*1024)
@@ -86,7 +85,7 @@ func (r *Runtime) Attach(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runtime) Exists() (bool, error) {
+func (r *Server) Exists() (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

@@ -1,17 +1,19 @@
-package runtime
+package server
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
 	"time"
 
+	"github.com/buger/jsonparser"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 )
 
 // create creates the underlying Docker container and shouldn't be called manually
-func (r *Runtime) create(ctx context.Context) error {
+func (r *Server) create(ctx context.Context) error {
 	// TODO: proper service configuration stuff
 	image := "docker.io/library/ubuntudksfjaskf"
 	if err := r.checkImage(image); err != nil {
@@ -50,7 +52,7 @@ func (r *Runtime) create(ctx context.Context) error {
 }
 
 // TODO: Add remove options
-func (r *Runtime) remove(ctx context.Context) error {
+func (r *Server) remove(ctx context.Context) error {
 	if _, err := r.cli.ContainerRemove(ctx, r.ID(), client.ContainerRemoveOptions{
 		RemoveVolumes: true,
 		Force:         true,
@@ -61,27 +63,53 @@ func (r *Runtime) remove(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runtime) checkImage(image string) error {
+type ImagePullProgress struct {
+	Status  string
+	Current uint64
+	Total   uint64
+}
+
+// checkImage checks an image and potentially pulls it, it's a non-blocking function and outputs
+// the status updates like docker log lines or errors through the channel
+func (r *Server) checkImage(image string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
 	// TODO: for now it just always pulls but we gotta make this smarter
 
-	_ = r.bus.Publish(EventImagePullBegin, fmt.Sprintf("pulling image `%s`...", image))
-	reader, err := r.cli.ImagePull(ctx, image, client.ImagePullOptions{})
+	r.bus.Publish(EventImagePullBegin, fmt.Sprintf("pulling image `%s`...", image))
+	out, err := r.cli.ImagePull(ctx, image, client.ImagePullOptions{})
 	if err != nil {
-		return fmt.Errorf("failed image pull: %w", err)
+		return fmt.Errorf("failed to pull image: %w", err)
 	}
+	defer out.Close()
 
-	defer func() { _ = reader.Close() }()
-	// TODO: make it actually parse the lines and send it properly in
-	_, _ = io.Copy(r.bus.Writer(EventImagePullProgress), reader)
-	_ = r.bus.Publish(EventImagePullDone, fmt.Sprintf("finished pulling image `%s`.", image))
+	scanner := bufio.NewScanner(out)
+	for scanner.Scan() {
+		line := scanner.Bytes()
 
+		status, _ := jsonparser.GetString(line, "status")
+		current, _ := jsonparser.GetUint64(line, "progressDetail", "current")
+		total, _ := jsonparser.GetUint64(line, "progressDetail", "total")
+
+		if payload, err := json.Marshal(ImagePullProgress{
+			Status:  status,
+			Current: current,
+			Total:   total,
+		}); err != nil {
+			return err
+		} else {
+			r.bus.Publish(EventImagePullProgress, string(payload))
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	r.bus.Publish(EventImagePullDone, fmt.Sprintf("finished pulling image `%s`.", image))
 	return nil
 }
 
-func (r *Runtime) setStream(stream *client.HijackedResponse) {
+func (r *Server) setStream(stream *client.HijackedResponse) {
 	r.mu.Lock()
 	r.stream = stream
 	r.mu.Unlock()

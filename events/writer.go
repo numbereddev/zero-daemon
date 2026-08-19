@@ -33,9 +33,6 @@ func (w *topicWriter[T]) Write(p []byte) (n int, err error) {
 		return 0, fmt.Errorf("Write() only supports []byte or string, got %T", typedBuf)
 	}
 
-	if err := w.bus.Publish(w.topic, typedBuf); err != nil {
-		return 0, err
-	}
-
+	w.bus.Publish(w.topic, typedBuf)
 	return len(buf), nil
 }
