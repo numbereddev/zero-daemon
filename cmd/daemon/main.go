@@ -12,10 +12,10 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/moby/moby/client"
+	"github.com/numbereddev/zero-daemon/container"
 	"github.com/numbereddev/zero-daemon/events"
 	"github.com/numbereddev/zero-daemon/internal/database"
 	"github.com/numbereddev/zero-daemon/router"
-	"github.com/numbereddev/zero-daemon/server"
 )
 
 type WSMessage struct {
@@ -50,7 +50,7 @@ func main() {
 	{
 		// WARNING: TESTING STUFF
 
-		testServer := server.New(apiClient, "test")
+		testServer := container.New(apiClient, "test", &container.Config{})
 
 		app.Get("/testing", func(c fiber.Ctx) error {
 			ctx := context.Background()
@@ -92,7 +92,7 @@ func main() {
 							return
 						}
 
-						if event.Topic == server.EventConsoleOut {
+						if event.Topic == container.EventConsoleOut {
 							consoleBuf.WriteString(event.Data)
 						} else {
 							if payload, err := json.Marshal(WSMessage{
@@ -108,7 +108,7 @@ func main() {
 						}
 
 						if payload, err := json.Marshal(WSMessage{
-							Event: server.EventConsoleOut,
+							Event: container.EventConsoleOut,
 							Args:  []json.RawMessage{mustJSONString(consoleBuf.String())},
 						}); err == nil {
 							c.WriteMessage(websocket.TextMessage, payload)
