@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	EventImagePullProgress = "image.pull.progress" // Data is of type ImagePullProgress
+	EventImagePullProgress = "image.pull.progress" // event.Data is of type ImagePullProgress
 	EventImagePullBegin    = "image.pull.begin"
 	EventImagePullDone     = "image.pull.done"
 	EventStateChange       = "state.change"
@@ -21,12 +21,18 @@ const (
 // TODO: start/running detector
 // TODO: historical logs getting
 
+type ImagePullProgress struct {
+	Status  string
+	Current uint64
+	Total   uint64
+}
+
 type Server struct {
 	mu  sync.RWMutex
 	cli *client.Client
 
-	id    string
-	state system.AtomicString
+	id     string
+	status system.AtomicString
 
 	stream *client.HijackedResponse
 	bus    *events.Bus[string]
@@ -35,38 +41,38 @@ type Server struct {
 func New(cli *client.Client, id string) *Server {
 	// TODO: Configuration
 	return &Server{
-		id:    id,
-		cli:   cli,
-		state: *system.NewAtomicString("offline"),
-		bus:   events.NewBus[string](),
+		id:     id,
+		cli:    cli,
+		status: *system.NewAtomicString("offline"),
+		bus:    events.NewBus[string](),
 	}
 }
 
-func (r *Server) ID() string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.id
+func (s *Server) ID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.id
 }
 
-func (r *Server) Events() events.Reader[string] {
-	return r.bus
+func (s *Server) Events() events.Reader[string] {
+	return s.bus
 }
 
-func (r *Server) State() string {
-	return r.state.Load()
+func (s *Server) IsAttached() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.stream != nil
 }
 
-func (r *Server) SetState(state string) {
-	if r.State() == state {
+func (s *Server) Status() string {
+	return s.status.Load()
+}
+
+func (s *Server) setStatus(state string) {
+	if s.Status() == state {
 		return
 	}
 
-	r.state.Store(state)
-	r.bus.Publish(EventStateChange, state)
-}
-
-func (r *Server) IsAttached() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.stream != nil
+	s.status.Store(state)
+	s.bus.Publish(EventStateChange, state)
 }
