@@ -90,18 +90,6 @@ func (s *Server) Create(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) Remove(ctx context.Context) error {
-	// TODO: Add Remove options
-	if _, err := s.cli.ContainerRemove(ctx, s.ID(), client.ContainerRemoveOptions{
-		RemoveVolumes: true,
-		Force:         true,
-	}); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // checkImage checks an image and potentially pulls it, it's a non-blocking function and outputs
 // the status updates like docker log lines or errors through the channel
 func (s *Server) checkImage(image string) error {
@@ -142,7 +130,7 @@ func (s *Server) checkImage(image string) error {
 	return nil
 }
 
-func (s *Server) IsCreated() (bool, error) {
+func (s *Server) Exists() (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -153,6 +141,18 @@ func (s *Server) IsCreated() (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func (s *Server) Remove(ctx context.Context) error {
+	// TODO: Add Remove options
+	if _, err := s.cli.ContainerRemove(ctx, s.ID(), client.ContainerRemoveOptions{
+		RemoveVolumes: true,
+		Force:         true,
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Server) setStream(stream *client.HijackedResponse) {
